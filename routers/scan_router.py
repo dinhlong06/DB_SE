@@ -1,68 +1,50 @@
-from fastapi import APIRouter, Request, HTTPException
-from pydantic import BaseModel, Field
-from typing import List, Optional
-from datetime import datetime
-from bson import ObjectId
+from fastapi import APIRouter, Request, HTTPException, Depends
+from typing import List
+from utils.security import get_current_user
+from models.scan import ScanCreate, ScanResponse
 
 router = APIRouter()
 
-# Schema cho dữ liệu nhận từ Client
-class ScanCreate(BaseModel):
-    user_id: str
-    text: str
-    date: Optional[datetime] = Field(default_factory=datetime.utcnow)
-
-class PyObjectId(ObjectId):
-    @classmethod
-    def __get_validators__(cls):
-        yield cls.validate
-
-    @classmethod
-    def validate(cls, v):
-        if not ObjectId.is_valid(v):
-            raise ValueError("Invalid objectid")
-        return ObjectId(v)
-
-    @classmethod
-    def __modify_schema__(cls, field_schema):
-        field_schema.update(type="string")
-
-class ScanResponse(BaseModel):
-    id: str = Field(alias="_id")
-    user_id: str
-    text: str
-    date: datetime
-
-    class Config:
-        populate_by_name = True
-        json_encoders = {ObjectId: str}
-
 @router.post("/", status_code=201)
-async def create_scan(scan: ScanCreate, request: Request):
+async def create_scan(
+    scan: ScanCreate, 
+    request: Request, 
+    current_user: dict = Depends(get_current_user)
+):
     """
-    Lưu lịch sử từ OCR lên MongoDB (có gắn user_id).
+    Lưu lịch sử từ OCR lên MongoDB. user_id được lấy tự động từ Token.
     """
     db = request.app.mongodb
     scan_doc = scan.model_dump()
+    
+    # Gán user_id từ người dùng đang đăng nhập
+    scan_doc["user_id"] = current_user["_id"]
+    
     result = await db["scan_history"].insert_one(scan_doc)
     
     return {
         "message": "Lưu thành công!",
         "data": {
             "id": str(result.inserted_id),
-            "user_id": scan.user_id,
+            "user_id": scan_doc["user_id"],
             "text": scan.text,
             "date": scan.date.isoformat()
         }
     }
 
 @router.get("/", response_model=List[ScanResponse])
-async def get_scans(request: Request, user_id: str, limit: int = 10):
+async def get_scans(
+    request: Request, 
+    limit: int = 10,
+    current_user: dict = Depends(get_current_user)
+):
     """
-    Lấy danh sách 10 bản ghi lịch sử mới nhất của một user cụ thể.
+    Lấy danh sách 10 bản ghi lịch sử mới nhất của người dùng đang đăng nhập.
     """
     db = request.app.mongodb
-    # Tìm bản ghi của riêng user_id này, sắp xếp theo thời gian mới nhất (giảm dần)
+    user_id = current_user["_id"]
+    
+    # Tìm bản ghi của riêng user_id này
     scans_cursor = db["scan_history"].find({"user_id": user_id}).sort("date", -1).limit(limit)
     
     scans = await scans_cursor.to_list(length=limit)
