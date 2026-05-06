@@ -1,58 +1,45 @@
-import os
-from datetime import datetime, timedelta
-from typing import Optional, Any
-from jose import JWTError, jwt
-from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status, Request
-from fastapi.security import OAuth2PasswordBearer
-from dotenv import load_dotenv
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from firebase_admin import auth
 
-load_dotenv()
+security = HTTPBearer()
 
-# Cấu hình mã hóa mật khẩu
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# Cấu hình JWT
-SECRET_KEY = os.getenv("SECRET_KEY")
-ALGORITHM = os.getenv("ALGORITHM")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES"))
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
-
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
-
-def get_password_hash(password):
-    return pwd_context.hash(password)
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-async def get_current_user(request: Request, token: str = Depends(oauth2_scheme)):
+async def get_current_user(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
+        # Giải mã và xác thực Token bằng Firebase Admin
+        decoded_token = auth.verify_id_token(token)
+        uid = decoded_token.get("uid")
+        
+        # Bắt buộc xác minh email (vì lúc trước bạn có yêu cầu tính năng này)
+        # Bỏ comment 4 dòng dưới đây nếu bạn muốn bắt buộc user phải xác minh email mới được gọi API
+        # if not decoded_token.get("email_verified", False):
+        #     raise HTTPException(
+        #         status_code=status.HTTP_403_FORBIDDEN,
+        #         detail="Email is not verified. Please check your inbox."
+        #     )
+            
+        if not uid:
             raise credentials_exception
-    except JWTError:
+    except Exception as e:
+        print(f"Token verification error: {e}")
         raise credentials_exception
     
     db = request.app.mongodb
-    user = await db["users"].find_one({"username": username})
+    # Tìm user trong MongoDB bằng uid
+    user = await db["users"].find_one({"uid": uid})
+    
     if user is None:
-        raise credentials_exception
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found in database. Please sync user first."
+        )
     
     user["_id"] = str(user["_id"])
     return user

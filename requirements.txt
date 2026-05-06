@@ -3,8 +3,7 @@ uvicorn>=0.22.0
 pymongo>=4.4.0
 motor>=3.3.0
 python-dotenv>=1.0.0
-passlib[bcrypt]
-python-jose[cryptography]
 pydantic[email]
-bcrypt==3.2.0
 python-multipart
+firebase-admin>=6.2.0
+cloudinary>=1.36.0

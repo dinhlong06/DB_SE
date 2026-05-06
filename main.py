@@ -3,11 +3,20 @@ from contextlib import asynccontextmanager
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 from dotenv import load_dotenv
-from routers import scan_router, auth_router # Thêm auth_router
+from routers import scan_router, auth_router, image_router
+import firebase_admin
+from firebase_admin import credentials
 
 load_dotenv()
 
 MONGO_URI = os.getenv("MONGO_URI")
+
+# Khởi tạo Firebase Admin SDK
+try:
+    cred = credentials.Certificate("firebase-credentials.json")
+    firebase_admin.initialize_app(cred)
+except Exception as e:
+    print(f"Lỗi khởi tạo Firebase: {e}")
 
 
 @asynccontextmanager
@@ -22,6 +31,7 @@ app = FastAPI(lifespan=lifespan, title="SEAPP Backend API")
 # Đăng ký các Router
 app.include_router(auth_router.router, prefix="/api/auth", tags=["auth"])
 app.include_router(scan_router.router, prefix="/api/scans", tags=["scans"])
+app.include_router(image_router.router, prefix="/api/images", tags=["images"])
 
 @app.get("/")
 async def root():

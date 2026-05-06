@@ -8,20 +8,19 @@ class UserRole(str, Enum):
     STUDENT = "student"
     TEACHER = "teacher"
 
-class UserCreate(BaseModel):
-    username: str = Field(..., min_length=3, max_length=50)
+class UserSync(BaseModel):
+    """Data received from Frontend to sync Firebase user to MongoDB"""
+    uid: str
     email: EmailStr
-    password: str = Field(..., min_length=6, max_length=72)
+    username: Optional[str] = None
     role: UserRole = UserRole.STUDENT
 
-class UserLogin(BaseModel):
-    username: str
-    password: str
-
 class UserResponse(BaseModel):
+    """Data returned to Frontend"""
     id: str = Field(alias="_id")
-    username: str
+    uid: str
     email: EmailStr
+    username: Optional[str] = None
     role: UserRole
     created_at: datetime
 
@@ -29,14 +28,10 @@ class UserResponse(BaseModel):
         populate_by_name = True
         json_encoders = {ObjectId: str}
 
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-    user: UserResponse
-
 class UserInDB(BaseModel):
-    username: str
+    """Data stored in MongoDB"""
+    uid: str
     email: EmailStr
-    hashed_password: str
+    username: Optional[str] = None
     role: UserRole
     created_at: datetime = Field(default_factory=datetime.utcnow)
