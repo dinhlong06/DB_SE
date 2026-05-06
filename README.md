@@ -1,90 +1,142 @@
 # SEAPP Backend API
 
-This is the backend service for the SEAPP application, built with **FastAPI** and **MongoDB**. It provides a robust API for user authentication, role-based access control, and scan history management.
+Backend service cho ứng dụng **SEAPP** — ứng dụng quét OCR ảnh, tóm tắt nội dung và tạo flashcard học tập. Được xây dựng bằng **FastAPI** và **MongoDB**.
 
 ## 🚀 Tech Stack
 
 - **Framework**: [FastAPI](https://fastapi.tiangolo.com/)
-- **Database**: MongoDB (via `pymongo` and `motor` for async operations)
-- **Authentication**: JWT (JSON Web Tokens) with `python-jose` and `passlib` for password hashing
+- **Database**: MongoDB Atlas (async via `motor`)
+- **Authentication**: Firebase Auth (ID Token verification)
+- **Image Storage**: [Cloudinary](https://cloudinary.com/)
 - **Server**: Uvicorn
 
 ## ✨ Features
 
-- **User Authentication**: Secure Sign Up and Sign In using JWT.
-- **Role-based Access Control**: Distinguishes between different user roles (e.g., Student, Teacher).
-- **Data Management**: CRUD operations for scan history linked to authenticated users.
-- **Automatic API Documentation**: Interactive Swagger UI and ReDoc out of the box.
+- **Firebase Authentication**: Xác thực người dùng bằng Firebase ID Token.
+- **User Sync**: Đồng bộ tài khoản Firebase → MongoDB sau khi đăng nhập/đăng ký.
+- **Role-based Access**: Phân quyền Student / Teacher.
+- **Scan History**: Lưu và truy vấn lịch sử OCR của từng người dùng.
+- **Image Management**: Upload ảnh lên Cloudinary, lưu URL vào MongoDB.
+- **Auto API Docs**: Swagger UI và ReDoc tự động.
 
 ## 📂 Project Structure
 
 ```text
 backend/
-├── main.py                 # FastAPI application instance & CORS setup
-├── models/                 # Pydantic models & Database schemas
-├── routers/                # API route definitions (auth_router, scan_router, etc.)
-├── utils/                  # Helper functions (security, JWT processing, password hashing)
-├── requirements.txt        # Python dependencies
-└── .env                    # Environment variables (Ignored by Git)
+├── main.py                      # FastAPI app instance & lifespan (MongoDB connect)
+├── models/
+│   ├── user.py                  # UserSync, UserInDB, UserResponse
+│   ├── scan.py                  # ScanCreate, ScanResponse
+│   └── image.py                 # ImageResponse
+├── routers/
+│   ├── auth_router.py           # POST /api/auth/sync-user
+│   ├── scan_router.py           # POST & GET /api/scans/
+│   └── image_router.py          # POST, GET, DELETE /api/images/
+├── utils/
+│   └── security.py              # Firebase token verification, get_current_user
+├── firebase-credentials.json    # Firebase Admin SDK key (KHÔNG commit)
+├── requirements.txt
+└── .env                         # Biến môi trường (KHÔNG commit)
 ```
+
+## 📡 API Endpoints
+
+### Auth
+| Method | Endpoint | Mô tả |
+|--------|----------|-------|
+| POST | `/api/auth/sync-user` | Đồng bộ user Firebase → MongoDB |
+
+### Scan History
+| Method | Endpoint | Mô tả |
+|--------|----------|-------|
+| POST | `/api/scans/` | Lưu kết quả OCR mới |
+| GET | `/api/scans/` | Lấy danh sách lịch sử OCR của user |
+
+### Images
+| Method | Endpoint | Mô tả |
+|--------|----------|-------|
+| POST | `/api/images/upload` | Upload ảnh lên Cloudinary |
+| GET | `/api/images/` | Lấy danh sách ảnh của user |
+| GET | `/api/images/{image_id}` | Xem ảnh theo ID (redirect về Cloudinary URL) |
+| DELETE | `/api/images/{image_id}` | Xoá ảnh khỏi Cloudinary & MongoDB |
+
+> Tất cả endpoint (trừ `/api/auth/sync-user`) đều yêu cầu **Bearer Token** (Firebase ID Token).
 
 ## 🛠️ Getting Started
 
-Follow these instructions to set up and run the project locally.
+### 1. Yêu cầu
+- Python 3.8+
+- MongoDB Atlas cluster
+- Firebase project (có Service Account)
+- Cloudinary account
 
-### 1. Prerequisites
-- Python 3.8+ installed on your machine.
-- A MongoDB cluster (e.g., MongoDB Atlas) or a local MongoDB instance.
-
-### 2. Clone the repository
+### 2. Clone repository
 ```bash
 git clone https://github.com/dinhlong06/DB_SE.git
 cd backend
 ```
 
-### 3. Create a Virtual Environment (Recommended)
+### 3. Tạo Virtual Environment
 ```bash
 python -m venv venv
-# On Windows
+# Windows
 venv\Scripts\activate
-# On macOS/Linux
+# macOS/Linux
 source venv/bin/activate
 ```
 
-### 4. Install Dependencies
+### 4. Cài Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 5. Configure Environment Variables
-Create a `.env` file in the root of the `backend` directory and add the following variables:
+### 5. Cấu hình Environment Variables
+Tạo file `.env` trong thư mục `backend/`:
 
 ```env
-MONGODB_URL=mongodb+srv://<username>:<password>@cluster.mongodb.net/?retryWrites=true&w=majority
-SECRET_KEY=your_super_secret_key_here
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-```
-> **Note:** Never commit your `.env` file to version control.
+# MongoDB
+MONGO_URI=mongodb+srv://<username>:<password>@cluster0.mongodb.net/
 
-### 6. Run the Server
-Start the development server with Uvicorn:
-```bash
-uvicorn main:app --reload
+# Cloudinary (lấy từ https://console.cloudinary.com)
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
 ```
-The server will start running at `http://127.0.0.1:8000`.
+
+Đặt file `firebase-credentials.json` (Service Account) vào thư mục `backend/`.
+
+> ⚠️ **Không commit** `.env` và `firebase-credentials.json` lên Git.
+
+### 6. Chạy Server
+```bash
+python -m uvicorn main:app --reload
+```
+Server chạy tại: `http://127.0.0.1:8000`
 
 ## 📚 API Documentation
-
-Once the server is running, you can interact with the API using the automatic documentation provided by FastAPI:
 
 - **Swagger UI**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 - **ReDoc**: [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
 
-## ☁️ Deployment
+## 🔑 Cách lấy Token để test
 
-This project is configured to be easily deployable on **Render**. 
+Gọi Firebase Auth REST API để lấy ID Token:
+
+```powershell
+$response = Invoke-RestMethod `
+  -Uri "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=YOUR_WEB_API_KEY" `
+  -Method POST `
+  -ContentType "application/json" `
+  -Body '{"email":"your@email.com","password":"yourpassword","returnSecureToken":true}'
+
+$response.idToken
+```
+
+Dùng `idToken` làm `Bearer Token` trong Swagger UI hoặc Postman.
+
+## ☁️ Deployment (Render)
+
 - **Build Command**: `pip install -r requirements.txt`
 - **Start Command**: `uvicorn main:app --host 0.0.0.0 --port 10000`
 
-Make sure to add your Environment Variables directly in the Render dashboard and whitelist `0.0.0.0/0` in your MongoDB Network Access settings.
+Thêm các biến trong `.env` vào Render dashboard. Whitelist `0.0.0.0/0` trong MongoDB Network Access.
