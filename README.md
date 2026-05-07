@@ -15,9 +15,9 @@ Backend service cho ứng dụng **SEAPP** — ứng dụng quét OCR ảnh, tó
 - **Firebase Authentication**: Xác thực người dùng bằng Firebase ID Token.
 - **User Sync**: Đồng bộ tài khoản Firebase → MongoDB sau khi đăng nhập/đăng ký.
 - **Role-based Access**: Phân quyền Student / Teacher.
-- **Scan History**: Lưu và truy vấn lịch sử OCR của từng người dùng.
-- **Image Management**: Upload ảnh lên Cloudinary, lưu URL vào MongoDB.
-- **Auto API Docs**: Swagger UI và ReDoc tự động.
+- **Scan Sessions**: Mỗi session gom toàn bộ dữ liệu 1 lần scan (ảnh + OCR + summary + flashcard) vào 1 document MongoDB.
+- **Image Upload**: Upload ảnh lên Cloudinary, lưu URL vào session.
+- **Partial Update**: AI bên ngoài cập nhật từng phần (scan / summary / flashcard) theo từng bước xử lý.
 
 ## 📂 Project Structure
 
@@ -26,12 +26,10 @@ backend/
 ├── main.py                      # FastAPI app instance & lifespan (MongoDB connect)
 ├── models/
 │   ├── user.py                  # UserSync, UserInDB, UserResponse
-│   ├── scan.py                  # ScanCreate, ScanResponse
-│   └── image.py                 # ImageResponse
+│   └── session.py               # SessionResponse, Flashcard, UpdateScan, ...
 ├── routers/
 │   ├── auth_router.py           # POST /api/auth/sync-user
-│   ├── scan_router.py           # POST & GET /api/scans/
-│   └── image_router.py          # POST, GET, DELETE /api/images/
+│   └── session_router.py        # CRUD + partial update /api/sessions/
 ├── utils/
 │   └── security.py              # Firebase token verification, get_current_user
 ├── firebase-credentials.json    # Firebase Admin SDK key (KHÔNG commit)
@@ -44,23 +42,36 @@ backend/
 ### Auth
 | Method | Endpoint | Mô tả |
 |--------|----------|-------|
-| POST | `/api/auth/sync-user` | Đồng bộ user Firebase → MongoDB |
+| `POST` | `/api/auth/sync-user` | Đồng bộ user Firebase → MongoDB |
 
-### Scan History
+### Sessions
 | Method | Endpoint | Mô tả |
 |--------|----------|-------|
-| POST | `/api/scans/` | Lưu kết quả OCR mới |
-| GET | `/api/scans/` | Lấy danh sách lịch sử OCR của user |
-
-### Images
-| Method | Endpoint | Mô tả |
-|--------|----------|-------|
-| POST | `/api/images/upload` | Upload ảnh lên Cloudinary |
-| GET | `/api/images/` | Lấy danh sách ảnh của user |
-| GET | `/api/images/{image_id}` | Xem ảnh theo ID (redirect về Cloudinary URL) |
-| DELETE | `/api/images/{image_id}` | Xoá ảnh khỏi Cloudinary & MongoDB |
+| `POST` | `/api/sessions/` | Tạo session mới + upload ảnh lên Cloudinary |
+| `GET` | `/api/sessions/` | Lấy danh sách session của user |
+| `GET` | `/api/sessions/{id}` | Lấy chi tiết 1 session (ảnh + scan + summary + flashcard) |
+| `DELETE` | `/api/sessions/{id}` | Xoá session + xoá ảnh khỏi Cloudinary |
+| `PATCH` | `/api/sessions/{id}/scan` | Lưu kết quả OCR text |
+| `PATCH` | `/api/sessions/{id}/summary` | Lưu title + summary do AI sinh |
+| `PATCH` | `/api/sessions/{id}/flashcards` | Lưu danh sách flashcard do AI sinh |
 
 > Tất cả endpoint (trừ `/api/auth/sync-user`) đều yêu cầu **Bearer Token** (Firebase ID Token).
+
+### MongoDB Document (collection: `scan_sessions`)
+
+```json
+{
+  "_id": "ObjectId",
+  "user_id": "string",
+  "title": "string (AI sinh khi PATCH summary)",
+  "created_at": "datetime",
+  "updated_at": "datetime",
+  "image": { "url": "...", "storage_path": "...", "filename": "...", "size_bytes": 0 },
+  "scan": { "text": "OCR text...", "scanned_at": "datetime" },
+  "summary": { "content": "Tóm tắt...", "generated_at": "datetime" },
+  "flashcards": [{ "id": "uuid", "front": "Câu hỏi?", "back": "Câu trả lời" }]
+}
+```
 
 ## 🛠️ Getting Started
 
@@ -119,8 +130,6 @@ Server chạy tại: `http://127.0.0.1:8000`
 - **ReDoc**: [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
 
 ## 🔑 Cách lấy Token để test
-
-Gọi Firebase Auth REST API để lấy ID Token:
 
 ```powershell
 $response = Invoke-RestMethod `
