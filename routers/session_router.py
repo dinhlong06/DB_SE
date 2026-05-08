@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
 from models.session import Flashcard, SessionResponse, UpdateScan
+from models.group import ShareSession
 from utils.security import get_current_user
 
 router = APIRouter()
@@ -103,6 +104,7 @@ async def create_session(
         "scan": None,
         "summary": None,
         "flashcards": [],
+        "shared_with": [],  # Danh sách group_id được chia sẻ
     }
 
     db = request.app.mongodb
@@ -276,3 +278,42 @@ async def update_flashcards(
         {"$set": {"flashcards": cards, "updated_at": now}},
     )
     return {"message": f"Cập nhật {len(cards)} flashcard thành công!"}
+
+
+# ---------------------------------------------------------------------------
+# Chia sẻ session với nhóm (chỉ Teacher)
+# ---------------------------------------------------------------------------
+
+@router.post("/{session_id}/share", status_code=200)
+async def share_session(
+    session_id: str,
+    body: ShareSession,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Teacher chia sẻ session của mình với một hoặc nhiều nhóm.
+    Chỉ chủ sở hữu session (Teacher) mới được phép chia sẻ.
+    """
+    if current_user.get("role") != "teacher":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chỉ Teacher mới có quyền chia sẻ tài liệu.",
+        )
+
+    if not ObjectId.is_valid(session_id):
+        raise HTTPException(status_code=400, detail="session_id không hợp lệ.")
+
+    db = request.app.mongodb
+    session = await db["scan_sessions"].find_one(
+        {"_id": ObjectId(session_id), "user_id": current_user["_id"]}
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Không tìm thấy session hoặc bạn không có quyền chia sẻ.")
+
+    # $addToSet để thêm các group_id mới, không trùng lặp
+    await db["scan_sessions"].update_one(
+        {"_id": ObjectId(session_id)},
+        {"$addToSet": {"shared_with": {"$each": body.group_ids}}},
+    )
+    return {"message": f"Chia sẻ session đến {len(body.group_ids)} nhóm thành công!"}

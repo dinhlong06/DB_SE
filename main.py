@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 from dotenv import load_dotenv
-from routers import auth_router, session_router
+from routers import auth_router, session_router, group_router
 import firebase_admin
 from firebase_admin import credentials
 
@@ -31,6 +31,7 @@ app = FastAPI(lifespan=lifespan, title="SEAPP Backend API")
 # Đăng ký các Router
 app.include_router(auth_router.router, prefix="/api/auth", tags=["auth"])
 app.include_router(session_router.router, prefix="/api/sessions", tags=["sessions"])
+app.include_router(group_router.router, prefix="/api/groups", tags=["groups"])
 
 @app.get("/")
 async def root():

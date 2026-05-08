@@ -38,6 +38,7 @@ class SessionResponse(BaseModel):
     scan: Optional[ScanData] = None
     summary: Optional[SummaryData] = None
     flashcards: List[Flashcard] = []
+    shared_with: List[str] = []  # Danh sách group_id mà session này được chia sẻ
 
     class Config:
         populate_by_name = True

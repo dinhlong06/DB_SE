@@ -9,9 +9,8 @@ class UserRole(str, Enum):
     TEACHER = "teacher"
 
 class UserSync(BaseModel):
-    """Data received from Frontend to sync Firebase user to MongoDB"""
-    uid: str
-    email: EmailStr
+    """Data received from Frontend — chỉ gửi username và role.
+    uid và email được lấy tự động từ Firebase Token."""
     username: Optional[str] = None
     role: UserRole = UserRole.STUDENT
 
