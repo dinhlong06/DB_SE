@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import json
 from dotenv import load_dotenv
 from routers import auth_router, session_router, group_router
 import firebase_admin
@@ -12,11 +13,18 @@ load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI")
 
 # Khởi tạo Firebase Admin SDK
+# Ưu tiên: biến môi trường FIREBASE_CREDENTIALS_JSON (dùng khi deploy)
+#           → fallback: file firebase-credentials.json (dùng khi dev local)
 try:
-    cred = credentials.Certificate("firebase-credentials.json")
+    firebase_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
+    if firebase_json:
+        cred = credentials.Certificate(json.loads(firebase_json))
+    else:
+        cred = credentials.Certificate("firebase-credentials.json")
     firebase_admin.initialize_app(cred)
 except Exception as e:
     print(f"Lỗi khởi tạo Firebase: {e}")
+
 
 
 @asynccontextmanager
